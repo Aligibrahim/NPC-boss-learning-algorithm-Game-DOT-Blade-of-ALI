@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/log", "destination": "/api/log" },
+    { "source": "/log-session", "destination": "/api/log-session" }
+  ]
+}
