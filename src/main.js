@@ -3,6 +3,7 @@
 import { createBrain } from './brain.js';
 import { createGame } from './game.js';
 import { createUI } from './ui.js';
+import { createLogger } from './logger.js';
 
 const canvas = document.getElementById('arena');
 const dom = {
@@ -19,6 +20,13 @@ const dom = {
   statAlpha: document.getElementById('stat-alpha'),
   statObs: document.getElementById('stat-obs'),
   statDeaths: document.getElementById('stat-deaths'),
+  metAcc: document.getElementById('met-acc'),
+  metPrec: document.getElementById('met-prec'),
+  metRec: document.getElementById('met-rec'),
+  metF1: document.getElementById('met-f1'),
+  sideMarker: document.getElementById('side-marker'),
+  sideLabel: document.getElementById('side-label'),
+  sideLead: document.getElementById('side-lead'),
   overlay: document.getElementById('overlay'),
   overlayTitle: document.getElementById('overlay-title'),
   overlaySub: document.getElementById('overlay-sub'),
@@ -28,12 +36,16 @@ const dom = {
 
 const audio = createAudio();
 
+const logger = createLogger();
+logger.sessionStart();
+
 const brain = createBrain();
-const ui = createUI(dom);
+const ui = createUI(dom, logger);
 const game = createGame(canvas, brain, ui, audio);
 
 ui.refreshBars(brain);
 ui.hookReset(() => {
+  logger.resetMark('fight again');
   game.resetArena(true);
   ui.resetHistoryDisplay();
 });
@@ -50,12 +62,11 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'arrowleft') keys.a = true;
   else if (k === 'arrowright') keys.d = true;
 
-  if (k === 'j') game.triggerPlayerAction('light');
-  else if (k === 'k') game.triggerPlayerAction('heavy');
-  else if (k === ' ') { e.preventDefault(); game.triggerPlayerAction('dodge'); }
-  else if (k === 'l') game.triggerPlayerAction('block');
+  if (k === ' ') { e.preventDefault(); game.triggerPlayerAction('dodge'); }
+  else if (k === 'f') game.triggerPlayerAction('block');
   else if (k === 'b') console.log('[BRAIN]', brain.dump());
   else if (k === 'r') {
+    logger.resetMark('R key — brain wiped');
     game.resetArena(false);
     ui.resetHistoryDisplay();
     ui.refreshBars(brain);
@@ -70,8 +81,19 @@ window.addEventListener('keyup', (e) => {
   else if (k === 'arrowdown') keys.s = false;
   else if (k === 'arrowleft') keys.a = false;
   else if (k === 'arrowright') keys.d = false;
-  else if (k === 'l') game.endBlock();
+  else if (k === 'f') game.endBlock();
 });
+
+canvas.addEventListener('mousedown', (e) => {
+  if (e.button === 0) {
+    e.preventDefault();
+    game.triggerPlayerAction('light');
+  } else if (e.button === 2) {
+    e.preventDefault();
+    game.triggerPlayerAction('heavy');
+  }
+});
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 // --- Touch joystick & buttons ---
 const joystick = document.getElementById('joystick');

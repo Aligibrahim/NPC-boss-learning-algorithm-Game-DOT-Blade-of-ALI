@@ -33,7 +33,7 @@ const BOSS_MOVES = {
   slash: { tell: 0.40, active: 0.10, reach: 130, dmg: 14, breaksBlock: false, label: 'SLASH' },
   slam:  { tell: 0.60, active: 0.14, reach: 110, dmg: 26, breaksBlock: true,  label: 'SLAM' },
   charge:{ tell: 0.50, active: 0.22, reach: 320, dmg: 20, breaksBlock: false, label: 'CHARGE' },
-  aoe:   { tell: 0.80, active: 0.15, reach: 90,  dmg: 30, breaksBlock: false, label: 'AOE' },
+  aoe:   { tell: 0.90, active: 0.18, reach: 72,  dmg: 28, breaksBlock: false, label: 'AOE', trackTau: 0.45 },
 };
 
 export function createGame(canvas, brain, ui, audio) {
@@ -63,6 +63,7 @@ export function createGame(canvas, brain, ui, audio) {
       action: null,
       nextActionAt: 0.8,
       facing: 1,
+      enraged: false,
     },
     particles: [],
     shake: { mag: 0, until: 0 },
@@ -81,6 +82,7 @@ export function createGame(canvas, brain, ui, audio) {
     state.boss.hp = BOSS_MAX_HP;
     state.boss.action = null;
     state.boss.nextActionAt = state.time + 0.8;
+    state.boss.enraged = false;
     state.particles = [];
     state.shake = { mag: 0, until: 0 };
     state.hitstopUntil = 0;
@@ -106,7 +108,7 @@ export function createGame(canvas, brain, ui, audio) {
         iframesEnd: state.time + DODGE_IFRAMES,
       };
       p.dodgeReadyAt = state.time + DODGE_COOLDOWN;
-      brain.observe('dodge');
+      brain.observe('dodge', state.player.x / W);
       ui.onPlayerAction('dodge', brain);
       audio.beep(520, 0.06, 'triangle', 0.08);
       return;
@@ -121,7 +123,7 @@ export function createGame(canvas, brain, ui, audio) {
         recoveryEnd: state.time + LIGHT_WINDUP + LIGHT_ACTIVE + LIGHT_RECOVERY,
         hitApplied: false,
       };
-      brain.observe('light');
+      brain.observe('light', state.player.x / W);
       ui.onPlayerAction('light', brain);
       audio.beep(880, 0.05, 'square', 0.06);
       return;
@@ -136,7 +138,7 @@ export function createGame(canvas, brain, ui, audio) {
         recoveryEnd: state.time + HEAVY_WINDUP + HEAVY_ACTIVE + HEAVY_RECOVERY,
         hitApplied: false,
       };
-      brain.observe('heavy');
+      brain.observe('heavy', state.player.x / W);
       ui.onPlayerAction('heavy', brain);
       audio.beep(240, 0.14, 'sawtooth', 0.1);
       return;
@@ -145,7 +147,7 @@ export function createGame(canvas, brain, ui, audio) {
     if (type === 'block') {
       if (p.blockHeld) return;
       p.blockHeld = true;
-      brain.observe('block');
+      brain.observe('block', state.player.x / W);
       ui.onPlayerAction('block', brain);
       audio.beep(160, 0.06, 'triangle', 0.05);
       return;
@@ -175,12 +177,44 @@ export function createGame(canvas, brain, ui, audio) {
     const ang = Math.atan2(dy, dx);
     action.params.angleAtStart = ang;
     state.boss.facing = Math.cos(ang) >= 0 ? 1 : -1;
+    // Spatial lead: if brain has learned a side preference, bias the target
+    // toward the favored half. Confidence ramps with sample count so early
+    // on we don't over-commit. Max pull is ~80px.
+    const side = brain.sideBias();
+    const leadPx = -side.lead * 80 * side.confidence;
+
     if (pick.action === 'charge') {
-      action.params.lockedTargetX = state.player.x;
+      const tx = clamp(state.player.x + leadPx, BOSS_R, W - BOSS_R);
+      action.params.lockedTargetX = tx;
       action.params.lockedTargetY = state.player.y;
+      action.params.leadApplied = leadPx;
+    }
+    if (pick.action === 'aoe') {
+      // Tracker starts at the boss and chases the player with a time constant,
+      // so a fast/juking player can outpace or juke it. Locks on tracker pos
+      // (not player pos) when the tell ends — reward last-second movement.
+      action.params.trackX = state.boss.x;
+      action.params.trackY = state.boss.y;
+      action.params.leadPx = leadPx; // applied at lock-time below
+
+      // Enraged delayed explosion: roll a random fuse 0–600ms AFTER lock,
+      // during which the circle sits there glaring before detonating. This
+      // blows up the "walk out at lock time" habit from the basic AOE.
+      if (state.boss.enraged) {
+        action.params.fuse = Math.random() * 0.6;
+      } else {
+        action.params.fuse = 0;
+      }
+      // Shift the damage window forward by the fuse.
+      action.activeEnd = action.tellEnd + action.params.fuse + move.active;
+      action.params.explodeAt = action.tellEnd + action.params.fuse;
     }
     state.boss.action = action;
-    ui.onBossAction(pick);
+    ui.onBossAction({
+      ...pick,
+      fuseMs: pick.action === 'aoe' ? Math.round((action.params.fuse ?? 0) * 1000) : 0,
+      leadPx: Math.round(leadPx),
+    });
   }
 
   function updateBoss(dt) {
@@ -206,13 +240,29 @@ export function createGame(canvas, brain, ui, audio) {
       b.y += (dy / d) * Math.min(speed * dt, d);
     }
 
-    if (action.type === 'aoe' && !action.params.locked && state.time >= action.tellEnd) {
-      action.params.lockedX = p.x;
-      action.params.lockedY = p.y;
-      action.params.locked = true;
+    if (action.type === 'aoe') {
+      if (state.time < action.tellEnd) {
+        // Exponential easing toward the player. Tracker lags normally, but
+        // when boss drops below 25% HP it enrages and the tracker roughly
+        // doubles speed — last-stand phase.
+        const baseTau = move.trackTau ?? 0.45;
+        const tau = state.boss.enraged ? baseTau * 0.48 : baseTau;
+        const k = 1 - Math.exp(-dt / tau);
+        action.params.trackX += (p.x - action.params.trackX) * k;
+        action.params.trackY += (p.y - action.params.trackY) * k;
+      } else if (!action.params.locked) {
+        // Lock on tracker position (which lags), not player position.
+        // Also apply any learned spatial lead.
+        const leadPx = action.params.leadPx ?? 0;
+        action.params.lockedX = clamp(action.params.trackX + leadPx, 20, W - 20);
+        action.params.lockedY = action.params.trackY;
+        action.params.locked = true;
+      }
     }
 
-    if (!action.hitApplied && state.time >= action.tellEnd && state.time < action.activeEnd) {
+    // AOE damage is gated by the fuse; other moves fire at tellEnd.
+    const damageStart = action.type === 'aoe' ? (action.params.explodeAt ?? action.tellEnd) : action.tellEnd;
+    if (!action.hitApplied && state.time >= damageStart && state.time < action.activeEnd) {
       if (hitsPlayer(action, move)) {
         applyBossHit(move);
         action.hitApplied = true;
@@ -248,8 +298,8 @@ export function createGame(canvas, brain, ui, audio) {
       return Math.hypot(p.x - b.x, p.y - b.y) < PLAYER_R + BOSS_R;
     }
     if (action.type === 'aoe') {
-      const x = action.params.lockedX ?? p.x;
-      const y = action.params.lockedY ?? p.y;
+      const x = action.params.lockedX ?? action.params.trackX;
+      const y = action.params.lockedY ?? action.params.trackY;
       return Math.hypot(p.x - x, p.y - y) < move.reach;
     }
     return false;
@@ -269,7 +319,7 @@ export function createGame(canvas, brain, ui, audio) {
     if (p.hp <= 0) {
       state.deaths++;
       state.over = true;
-      ui.onGameOver(false, state);
+      ui.onGameOver(false, state, brain);
     }
   }
 
@@ -299,10 +349,21 @@ export function createGame(canvas, brain, ui, audio) {
           state.hitstopUntil = state.time + (a.type === 'heavy' ? 0.12 : 0.06);
           burst(b.x, b.y, '#7cf6c4', a.type === 'heavy' ? 14 : 8);
           audio.beep(a.type === 'heavy' ? 420 : 740, 0.08, 'square', 0.1);
+          // Desperation phase: boss drops below 25% HP for the first time.
+          if (!b.enraged && b.hp > 0 && b.hp / BOSS_MAX_HP <= 0.25) {
+            b.enraged = true;
+            state.shake = { mag: 12, until: state.time + 0.45 };
+            state.hitstopUntil = state.time + 0.18;
+            burst(b.x, b.y, '#ff5470', 28);
+            audio.beep(70,  0.35, 'sawtooth', 0.22);
+            audio.beep(140, 0.30, 'sawtooth', 0.18);
+            audio.beep(220, 0.25, 'square',   0.14);
+            ui.onBossAction({ action: 'enrage', reason: 'enrage', predicted: null });
+          }
           if (b.hp <= 0) {
             state.wins++;
             state.over = true;
-            ui.onGameOver(true, state);
+            ui.onGameOver(true, state, brain);
           }
         }
       }
@@ -398,16 +459,33 @@ export function createGame(canvas, brain, ui, audio) {
     ctx.save();
     ctx.translate(b.x, b.y);
     ctx.scale(pulse, pulse);
+
+    // Enraged: pulsing outer glow ring.
+    if (b.enraged) {
+      const beat = 0.6 + 0.4 * Math.sin(state.time * 10);
+      ctx.beginPath();
+      ctx.arc(0, 0, BOSS_R + 12, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 84, 112, ${0.18 * beat})`;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, 0, BOSS_R + 6, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255, 84, 112, ${0.55 + 0.25 * beat})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
     ctx.beginPath();
     ctx.arc(0, 0, BOSS_R, 0, Math.PI * 2);
-    ctx.fillStyle = '#2b1e2e';
+    ctx.fillStyle = b.enraged ? '#3d1a24' : '#2b1e2e';
     ctx.fill();
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = '#ff5470';
+    ctx.lineWidth = b.enraged ? 4 : 3;
+    ctx.strokeStyle = b.enraged ? '#ff7a90' : '#ff5470';
     ctx.stroke();
+
+    // Eye — glows yellow/white when enraged.
     ctx.beginPath();
-    ctx.arc(b.facing * 12, -6, 5, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffb84d';
+    ctx.arc(b.facing * 12, -6, b.enraged ? 6 : 5, 0, Math.PI * 2);
+    ctx.fillStyle = b.enraged ? '#fff1a8' : '#ffb84d';
     ctx.fill();
     ctx.restore();
   }
@@ -468,16 +546,39 @@ export function createGame(canvas, brain, ui, audio) {
       ctx.arc(tx, ty, 12, 0, Math.PI * 2);
       ctx.stroke();
     } else if (a.type === 'aoe') {
-      const x = a.params.locked ? a.params.lockedX : state.player.x;
-      const y = a.params.locked ? a.params.lockedY : state.player.y;
-      ctx.beginPath();
-      ctx.arc(x, y, move.reach, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      if (inTell) {
+      const x = a.params.locked ? a.params.lockedX : a.params.trackX;
+      const y = a.params.locked ? a.params.lockedY : a.params.trackY;
+      const explodeAt = a.params.explodeAt ?? a.tellEnd;
+      const fuseActive = a.params.locked && now < explodeAt;
+      const fuseLen = Math.max(0.001, explodeAt - a.tellEnd);
+
+      if (fuseActive) {
+        // Locked but not yet exploded — amber/red burning fuse ring.
+        const fuseProg = (now - a.tellEnd) / fuseLen;
+        const fastBeat = 0.5 + 0.5 * Math.sin(now * 32);
+        ctx.fillStyle = `rgba(255, 84, 112, ${0.35 + 0.25 * fastBeat})`;
+        ctx.strokeStyle = `rgba(255, 220, 120, ${0.85 + 0.15 * fastBeat})`;
+        ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.arc(x, y, move.reach * progress, 0, Math.PI * 2);
+        ctx.arc(x, y, move.reach, 0, Math.PI * 2);
+        ctx.fill();
         ctx.stroke();
+        // Fuse ring shrinks from outer radius toward 0 as detonation nears.
+        ctx.strokeStyle = `rgba(255, 220, 120, ${0.7 + 0.3 * fastBeat})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, move.reach * (1 - fuseProg), 0, Math.PI * 2);
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(x, y, move.reach, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        if (inTell) {
+          ctx.beginPath();
+          ctx.arc(x, y, move.reach * progress, 0, Math.PI * 2);
+          ctx.stroke();
+        }
       }
     }
     ctx.restore();
@@ -546,9 +647,9 @@ export function createGame(canvas, brain, ui, audio) {
   }
 
   function drawHpBars() {
-    bar(16, 16, 220, 12, state.player.hp / state.player.maxHp, '#7cf6c4', 'YOU');
+    bar(16, 16, 220, 12, state.player.hp / state.player.maxHp, '#7cf6c4', 'TROLL');
     const w = 380;
-    bar((W - w) / 2, 16, w, 14, state.boss.hp / BOSS_MAX_HP, '#ff5470', 'BOSS');
+    bar((W - w) / 2, 16, w, 14, state.boss.hp / BOSS_MAX_HP, '#ff5470', 'DOT — BLADE OF ALI');
   }
 
   function bar(x, y, w, h, pct, color, label) {
@@ -580,4 +681,8 @@ function wrapAngle(a) {
   while (a > Math.PI) a -= Math.PI * 2;
   while (a < -Math.PI) a += Math.PI * 2;
   return a;
+}
+
+function clamp(v, lo, hi) {
+  return v < lo ? lo : v > hi ? hi : v;
 }

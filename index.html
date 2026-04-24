@@ -29,7 +29,7 @@
       </div>
       <aside id="brain-panel">
         <header>
-          <h2>BOSS MIND</h2>
+          <h2>DOT MIND</h2>
           <button id="panel-toggle" title="collapse">–</button>
         </header>
         <section class="predict">
@@ -42,9 +42,27 @@
           <div class="bar-row"><span>Dodge</span><div class="bar"><div id="bar-dodge"></div></div><em id="val-dodge">0%</em></div>
           <div class="bar-row"><span>Block</span><div class="bar"><div id="bar-block"></div></div><em id="val-block">0%</em></div>
         </section>
+        <section class="side">
+          <div class="label">Position bias</div>
+          <div class="side-bar">
+            <div id="side-marker"></div>
+          </div>
+          <div class="side-stat">
+            <span id="side-label">balanced</span>
+            <em id="side-lead">—</em>
+          </div>
+        </section>
         <section class="history">
           <div class="label">Last moves</div>
           <div id="history-list"></div>
+        </section>
+        <section class="metrics">
+          <div class="label">Model performance</div>
+          <div class="metric-row"><span>Accuracy</span><em id="met-acc">—</em></div>
+          <div class="metric-row"><span>Precision</span><em id="met-prec">—</em></div>
+          <div class="metric-row"><span>Recall</span><em id="met-rec">—</em></div>
+          <div class="metric-row"><span>F1</span><em id="met-f1">—</em></div>
+          <div class="metric-hint">macro-avg over 4 classes · baseline ≈ 25%</div>
         </section>
         <section class="stats">
           <div>α: <span id="stat-alpha">0.15</span></div>
