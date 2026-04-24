@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#0a0a0f" />
+    <title>Adaptive Boss</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="arena-wrap">
+        <canvas id="arena" width="800" height="600"></canvas>
+        <div id="telegraph-label"></div>
+        <div id="touch-controls">
+          <div id="joystick"><div id="joystick-knob"></div></div>
+          <div id="action-buttons">
+            <button class="act-btn" data-action="light">J</button>
+            <button class="act-btn" data-action="heavy">K</button>
+            <button class="act-btn" data-action="dodge">DODGE</button>
+            <button class="act-btn" data-action="block">BLOCK</button>
+          </div>
+        </div>
+        <div id="overlay" class="hidden">
+          <div id="overlay-title"></div>
+          <div id="overlay-sub"></div>
+          <button id="overlay-btn">Fight again</button>
+        </div>
+      </div>
+      <aside id="brain-panel">
+        <header>
+          <h2>BOSS MIND</h2>
+          <button id="panel-toggle" title="collapse">–</button>
+        </header>
+        <section class="predict">
+          <div class="label">Predicting</div>
+          <div id="predict-action">—</div>
+        </section>
+        <section class="bars">
+          <div class="bar-row"><span>Light</span><div class="bar"><div id="bar-light"></div></div><em id="val-light">0%</em></div>
+          <div class="bar-row"><span>Heavy</span><div class="bar"><div id="bar-heavy"></div></div><em id="val-heavy">0%</em></div>
+          <div class="bar-row"><span>Dodge</span><div class="bar"><div id="bar-dodge"></div></div><em id="val-dodge">0%</em></div>
+          <div class="bar-row"><span>Block</span><div class="bar"><div id="bar-block"></div></div><em id="val-block">0%</em></div>
+        </section>
+        <section class="history">
+          <div class="label">Last moves</div>
+          <div id="history-list"></div>
+        </section>
+        <section class="stats">
+          <div>α: <span id="stat-alpha">0.15</span></div>
+          <div>obs: <span id="stat-obs">0</span></div>
+          <div>deaths: <span id="stat-deaths">0</span></div>
+        </section>
+      </aside>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

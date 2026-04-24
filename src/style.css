@@ -1,0 +1,316 @@
+:root {
+  --bg: #0a0a0f;
+  --panel: #11131a;
+  --panel-line: #22252f;
+  --ink: #e8e8ef;
+  --muted: #7c8091;
+  --accent: #7cf6c4;
+  --accent-dim: #2a5a48;
+  --danger: #ff5470;
+  --warn: #ffb84d;
+  --blue: #5aa6ff;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+#app {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  gap: 12px;
+  padding: 12px;
+}
+
+#arena-wrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 40%, #12141c 0%, #07080c 80%);
+  border: 1px solid var(--panel-line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+#arena {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  image-rendering: pixelated;
+}
+
+#telegraph-label {
+  position: absolute;
+  top: 18%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-6px);
+  font-size: 13px;
+  letter-spacing: 0.2em;
+  color: var(--danger);
+  text-transform: uppercase;
+  opacity: 0;
+  transition: opacity 150ms;
+  pointer-events: none;
+  text-shadow: 0 0 8px rgba(255, 84, 112, 0.7);
+}
+
+#telegraph-label.show { opacity: 1; }
+
+#touch-controls {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: none;
+}
+
+#joystick {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--panel-line);
+  pointer-events: auto;
+}
+
+#joystick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 12px rgba(124, 246, 196, 0.4);
+}
+
+#action-buttons {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, 64px);
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.act-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 1px solid var(--panel-line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.act-btn:active { background: var(--accent-dim); color: var(--accent); }
+
+#overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(7, 8, 12, 0.85);
+  backdrop-filter: blur(6px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  z-index: 10;
+}
+
+#overlay.hidden { display: none; }
+
+#overlay-title {
+  font-size: 42px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+#overlay-title.win { color: var(--accent); }
+#overlay-title.loss { color: var(--danger); }
+
+#overlay-sub {
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+  max-width: 360px;
+  line-height: 1.5;
+}
+
+#overlay-btn {
+  margin-top: 12px;
+  padding: 12px 28px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 14px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+#overlay-btn:hover { background: var(--accent-dim); }
+
+#brain-panel {
+  width: 260px;
+  flex-shrink: 0;
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+#brain-panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#brain-panel h2 {
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  color: var(--accent);
+}
+
+#panel-toggle {
+  background: transparent;
+  border: 1px solid var(--panel-line);
+  color: var(--muted);
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+#brain-panel .label {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+#predict-action {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--warn);
+  letter-spacing: 0.05em;
+}
+
+.bars { display: flex; flex-direction: column; gap: 8px; }
+
+.bar-row {
+  display: grid;
+  grid-template-columns: 56px 1fr 40px;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.bar-row span { color: var(--muted); }
+
+.bar-row em {
+  font-style: normal;
+  color: var(--ink);
+  font-size: 10px;
+  text-align: right;
+}
+
+.bar {
+  height: 8px;
+  background: #1a1d26;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bar > div {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--blue), var(--accent));
+  border-radius: 4px;
+  transition: width 220ms ease;
+}
+
+.history #history-list {
+  display: flex;
+  gap: 4px;
+  height: 26px;
+  align-items: center;
+}
+
+.move-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  background: #1a1d26;
+  color: var(--ink);
+  animation: chip-in 200ms ease;
+}
+
+.move-chip.L { color: var(--blue); }
+.move-chip.H { color: var(--warn); }
+.move-chip.D { color: var(--accent); }
+.move-chip.B { color: var(--danger); }
+
+@keyframes chip-in {
+  from { transform: translateX(12px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.stats {
+  display: flex;
+  gap: 12px;
+  font-size: 10px;
+  color: var(--muted);
+  border-top: 1px solid var(--panel-line);
+  padding-top: 10px;
+  letter-spacing: 0.05em;
+}
+
+.stats span { color: var(--ink); }
+
+@media (max-width: 768px) {
+  #app { flex-direction: column; padding: 6px; gap: 6px; }
+  #brain-panel { width: 100%; max-height: 140px; padding: 10px; }
+  #brain-panel header h2 { font-size: 10px; }
+  .history { display: none; }
+  #touch-controls { display: block; }
+  #arena-wrap { flex: 1; min-height: 0; }
+}
+
+@media (max-width: 768px) and (orientation: landscape) {
+  #app { flex-direction: row; }
+  #brain-panel { width: 200px; max-height: none; }
+}
