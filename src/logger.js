@@ -39,7 +39,7 @@ export function createLogger() {
       `L${Math.round(dist.light * 100)}/` +
       `H${Math.round(dist.heavy * 100)}/` +
       `D${Math.round(dist.dodge * 100)}/` +
-      `B${Math.round(dist.block * 100)}`;
+      `P${Math.round(dist.parry * 100)}`;
     const metricStr = m.total >= 3
       ? `acc=${(m.accuracy * 100).toFixed(1).padStart(5)}% f1=${(m.f1 * 100).toFixed(1).padStart(5)}%`
       : `acc=   —   f1=   —  `;

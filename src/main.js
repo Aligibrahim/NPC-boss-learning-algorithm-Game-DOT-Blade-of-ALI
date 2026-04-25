@@ -4,19 +4,34 @@ import { createBrain } from './brain.js';
 import { createGame } from './game.js';
 import { createUI } from './ui.js';
 import { createLogger } from './logger.js';
+import { loadSprites } from './sprites.js';
 
 const canvas = document.getElementById('arena');
+const LEARNING_MODES = {
+  slow: {
+    label: 'Slow Learner',
+    alpha: 0.07,
+    description: 'DOT learns gradually, so repeated habits take longer to punish.',
+  },
+  fast: {
+    label: 'Fast Learner',
+    alpha: 0.30,
+    description: 'DOT updates quickly, so repeated habits get countered sooner.',
+  },
+};
+
 const dom = {
   predictAction: document.getElementById('predict-action'),
   'bar-light': document.getElementById('bar-light'),
   'bar-heavy': document.getElementById('bar-heavy'),
   'bar-dodge': document.getElementById('bar-dodge'),
-  'bar-block': document.getElementById('bar-block'),
+  'bar-parry': document.getElementById('bar-parry'),
   'val-light': document.getElementById('val-light'),
   'val-heavy': document.getElementById('val-heavy'),
   'val-dodge': document.getElementById('val-dodge'),
-  'val-block': document.getElementById('val-block'),
+  'val-parry': document.getElementById('val-parry'),
   historyList: document.getElementById('history-list'),
+  statMode: document.getElementById('stat-mode'),
   statAlpha: document.getElementById('stat-alpha'),
   statObs: document.getElementById('stat-obs'),
   statDeaths: document.getElementById('stat-deaths'),
@@ -31,7 +46,13 @@ const dom = {
   overlayTitle: document.getElementById('overlay-title'),
   overlaySub: document.getElementById('overlay-sub'),
   overlayBtn: document.getElementById('overlay-btn'),
+  modePicker: document.getElementById('mode-picker'),
+  modeCopy: document.getElementById('mode-copy'),
+  modeButtons: document.querySelectorAll('.mode-btn'),
   telegraphLabel: document.getElementById('telegraph-label'),
+  pauseBtn: document.getElementById('pause-btn'),
+  pauseOverlay: document.getElementById('pause-overlay'),
+  resumeBtn: document.getElementById('resume-btn'),
 };
 
 const audio = createAudio();
@@ -39,58 +60,155 @@ const audio = createAudio();
 const logger = createLogger();
 logger.sessionStart();
 
-const brain = createBrain();
+let currentModeId = 'slow';
+let waitingForMode = true;
+let manualPaused = false;
+let tabPaused = false;
+let brain = createBrain({ alpha: LEARNING_MODES[currentModeId].alpha });
 const ui = createUI(dom, logger);
-const game = createGame(canvas, brain, ui, audio);
+const sprites = await loadSprites();
+let game = createGame(canvas, brain, ui, audio, sprites);
 
+syncModeDisplay();
 ui.refreshBars(brain);
 ui.hookReset(() => {
   logger.resetMark('fight again');
   game.resetArena(true);
   ui.resetHistoryDisplay();
+  syncPausedState();
 });
 
+showModePicker();
+
+dom.modeButtons.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    selectMode(btn.dataset.mode);
+  });
+});
+
+dom.pauseBtn.addEventListener('click', () => togglePause());
+dom.resumeBtn.addEventListener('click', () => setManualPause(false));
+
+function selectMode(modeId) {
+  const mode = LEARNING_MODES[modeId] ?? LEARNING_MODES.slow;
+  currentModeId = LEARNING_MODES[modeId] ? modeId : 'slow';
+  brain = createBrain({ alpha: mode.alpha });
+  game = createGame(canvas, brain, ui, audio, sprites);
+  window.__brain = brain;
+  window.__game = game;
+  waitingForMode = false;
+  manualPaused = false;
+  ui.resetHistoryDisplay();
+  ui.refreshBars(brain);
+  syncModeDisplay();
+  ui.hideOverlay();
+  syncPausedState();
+  logger.resetMark(`${mode.label} selected`);
+}
+
+function showModePicker() {
+  waitingForMode = true;
+  manualPaused = false;
+  dom.overlayTitle.textContent = 'CHOOSE BOSS BRAIN';
+  dom.overlayTitle.className = '';
+  dom.overlaySub.textContent = 'Pick how fast DOT learns from your repeated moves.';
+  dom.modePicker.classList.remove('hidden');
+  dom.modeCopy.classList.remove('hidden');
+  dom.overlayBtn.classList.add('hidden');
+  dom.overlay.classList.remove('hidden');
+  syncPausedState();
+}
+
+function syncModeDisplay() {
+  const mode = LEARNING_MODES[currentModeId];
+  if (dom.statMode) dom.statMode.textContent = mode.label;
+  dom.modeButtons.forEach((btn) => {
+    btn.classList.toggle('selected', btn.dataset.mode === currentModeId);
+    const modeForButton = LEARNING_MODES[btn.dataset.mode];
+    if (modeForButton) {
+      btn.setAttribute('title', `${modeForButton.description} alpha=${modeForButton.alpha}`);
+    }
+  });
+}
+
+function setManualPause(paused) {
+  if (waitingForMode || game.state.over) return;
+  manualPaused = paused;
+  syncPausedState();
+}
+
+function togglePause() {
+  setManualPause(!manualPaused);
+}
+
+function syncPausedState() {
+  game.state.paused = waitingForMode || manualPaused || tabPaused;
+  const showManualPause = manualPaused && !waitingForMode && !game.state.over;
+  dom.pauseOverlay.classList.toggle('hidden', !showManualPause);
+  dom.pauseBtn.textContent = manualPaused ? 'Resume' : 'Pause';
+  dom.pauseBtn.disabled = waitingForMode || game.state.over;
+}
+
+function canApplyGameplayInput() {
+  return !waitingForMode && !game.state.paused && !game.state.over;
+}
+
 // --- Keyboard ---
-const keys = { w: false, a: false, s: false, d: false };
+const keys = { a: false, d: false, s: false };
 
 window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   const k = e.key.toLowerCase();
-  if (k === 'w' || k === 'a' || k === 's' || k === 'd') keys[k] = true;
-  else if (k === 'arrowup') keys.w = true;
-  else if (k === 'arrowdown') keys.s = true;
-  else if (k === 'arrowleft') keys.a = true;
-  else if (k === 'arrowright') keys.d = true;
-
-  if (k === ' ') { e.preventDefault(); game.triggerPlayerAction('dodge'); }
-  else if (k === 'f') game.triggerPlayerAction('block');
+  if (k === 'a' || k === 'arrowleft') {
+    if (canApplyGameplayInput()) keys.a = true;
+  }
+  else if (k === 'd' || k === 'arrowright') {
+    if (canApplyGameplayInput()) keys.d = true;
+  }
+  else if (k === 's' || k === 'arrowdown') {
+    if (canApplyGameplayInput()) {
+      keys.s = true;
+      game.setBlock(true);
+    }
+  }
+  else if (k === 'w' || k === 'arrowup') { e.preventDefault(); game.triggerPlayerAction('jump'); }
+  else if (k === ' ') { e.preventDefault(); game.triggerPlayerAction('dodge'); }
+  else if (k === 'e') game.triggerPlayerAction('parry');
+  else if (k === 'p' || k === 'escape') { e.preventDefault(); togglePause(); }
   else if (k === 'b') console.log('[BRAIN]', brain.dump());
   else if (k === 'r') {
+    if (waitingForMode) {
+      showModePicker();
+      return;
+    }
     logger.resetMark('R key — brain wiped');
     game.resetArena(false);
     ui.resetHistoryDisplay();
     ui.refreshBars(brain);
     ui.hideOverlay();
+    manualPaused = false;
+    syncPausedState();
   }
 });
 
 window.addEventListener('keyup', (e) => {
   const k = e.key.toLowerCase();
-  if (k === 'w' || k === 'a' || k === 's' || k === 'd') keys[k] = false;
-  else if (k === 'arrowup') keys.w = false;
-  else if (k === 'arrowdown') keys.s = false;
-  else if (k === 'arrowleft') keys.a = false;
-  else if (k === 'arrowright') keys.d = false;
-  else if (k === 'f') game.endBlock();
+  if (k === 'a' || k === 'arrowleft')  keys.a = false;
+  else if (k === 'd' || k === 'arrowright') keys.d = false;
+  else if (k === 's' || k === 'arrowdown') {
+    keys.s = false;
+    if (canApplyGameplayInput()) game.setBlock(false);
+  }
 });
 
+// MK-style: LMB = heavy, RMB = light.
 canvas.addEventListener('mousedown', (e) => {
   if (e.button === 0) {
     e.preventDefault();
-    game.triggerPlayerAction('light');
+    game.triggerPlayerAction('heavy');
   } else if (e.button === 2) {
     e.preventDefault();
-    game.triggerPlayerAction('heavy');
+    game.triggerPlayerAction('light');
   }
 });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -140,11 +258,6 @@ document.querySelectorAll('.act-btn').forEach(btn => {
     e.preventDefault();
     game.triggerPlayerAction(action);
   });
-  if (action === 'block') {
-    btn.addEventListener('pointerup', () => game.endBlock());
-    btn.addEventListener('pointercancel', () => game.endBlock());
-    btn.addEventListener('pointerleave', () => game.endBlock());
-  }
 });
 
 const panelToggle = document.getElementById('panel-toggle');
@@ -155,23 +268,41 @@ panelToggle.addEventListener('click', () => {
 
 // --- Main loop ---
 let last = performance.now();
+const fpsEl = document.getElementById('fps-counter');
 function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
 
-  let vx = 0, vy = 0;
-  if (keys.a) vx -= 1;
-  if (keys.d) vx += 1;
-  if (keys.w) vy -= 1;
-  if (keys.s) vy += 1;
-  if (touchState.active) {
-    vx += touchState.dx;
-    vy += touchState.dy;
+  const acceptingGameplayInput = canApplyGameplayInput();
+  let dir = 0;
+  if (acceptingGameplayInput) {
+    if (keys.a) dir -= 1;
+    if (keys.d) dir += 1;
+    if (touchState.active) dir += touchState.dx;
+    // Joystick up = jump trigger (rising edge).
+    if (touchState.active && touchState.dy < -0.6 && !touchState.jumpedThisStroke) {
+      touchState.jumpedThisStroke = true;
+      game.triggerPlayerAction('jump');
+    } else if (!touchState.active) {
+      touchState.jumpedThisStroke = false;
+    }
+    game.setBlock(keys.s);
+  } else {
+    touchState.jumpedThisStroke = false;
   }
-  game.setMoveInput(vx, vy);
+  game.setMoveInput(dir);
 
   game.tick(dt);
-  game.render();
+  game.render(now);
+  if (game.state.over && (manualPaused || !dom.pauseBtn.disabled)) {
+    manualPaused = false;
+    syncPausedState();
+  }
+
+  if (fpsEl && game.state.fps) {
+    fpsEl.textContent = game.state.fps + ' FPS';
+    fpsEl.className = game.state.fps < 40 ? 'crit' : game.state.fps < 55 ? 'low' : '';
+  }
 
   requestAnimationFrame(loop);
 }
@@ -209,6 +340,14 @@ function createAudio() {
     },
   };
 }
+
+// Pause on tab hide so we don't burn cycles offscreen.
+document.addEventListener('visibilitychange', () => {
+  tabPaused = document.hidden;
+  syncPausedState();
+  // Reset the dt clock when coming back so we don't get a giant catch-up step.
+  if (!document.hidden) last = performance.now();
+});
 
 window.__brain = brain;
 window.__game = game;

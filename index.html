@@ -4,27 +4,41 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#0a0a0f" />
-    <title>Adaptive Boss</title>
+    <title>Adaptive Boss — Blade of Ali</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <div id="app">
       <div id="arena-wrap">
-        <canvas id="arena" width="800" height="600"></canvas>
+        <canvas id="arena" width="960" height="540"></canvas>
         <div id="telegraph-label"></div>
+        <div id="fps-counter">60</div>
+        <button id="pause-btn" type="button">Pause</button>
         <div id="touch-controls">
           <div id="joystick"><div id="joystick-knob"></div></div>
           <div id="action-buttons">
-            <button class="act-btn" data-action="light">J</button>
-            <button class="act-btn" data-action="heavy">K</button>
+            <button class="act-btn" data-action="light">L</button>
+            <button class="act-btn" data-action="heavy">H</button>
+            <button class="act-btn" data-action="parry">PARRY</button>
             <button class="act-btn" data-action="dodge">DODGE</button>
-            <button class="act-btn" data-action="block">BLOCK</button>
           </div>
         </div>
         <div id="overlay" class="hidden">
           <div id="overlay-title"></div>
           <div id="overlay-sub"></div>
+          <div id="mode-picker" class="hidden">
+            <button class="mode-btn" type="button" data-mode="slow">Slow Learner</button>
+            <button class="mode-btn" type="button" data-mode="fast">Fast Learner</button>
+          </div>
+          <div id="mode-copy" class="hidden">
+            Slow learns gradually. Fast learns quickly from repeated moves.
+          </div>
           <button id="overlay-btn">Fight again</button>
+        </div>
+        <div id="pause-overlay" class="hidden">
+          <div id="pause-title">PAUSED</div>
+          <div id="pause-sub">Press P, Escape, or Resume to continue.</div>
+          <button id="resume-btn" type="button">Resume</button>
         </div>
       </div>
       <aside id="brain-panel">
@@ -35,12 +49,13 @@
         <section class="controls">
           <div class="label">Controls</div>
           <div class="ctrl-grid">
-            <kbd>WASD</kbd><span>Move</span>
-            <kbd>LMB</kbd><span>Light attack</span>
-            <kbd>RMB</kbd><span>Heavy attack</span>
-            <kbd>SPACE</kbd><span>Dodge (i-frames)</span>
-            <kbd>F</kbd><span>Block (hold)</span>
-            <kbd>B</kbd><span>Dump brain → console</span>
+            <kbd>A D</kbd><span>Move</span>
+            <kbd>W</kbd><span>Jump</span>
+            <kbd>S</kbd><span>Block (hold)</span>
+            <kbd>LMB</kbd><span>Heavy attack</span>
+            <kbd>RMB</kbd><span>Light attack</span>
+            <kbd>E</kbd><span>Parry (time it!)</span>
+            <kbd>SPC</kbd><span>Dodge (i-frames)</span>
             <kbd>R</kbd><span>Reset arena + brain</span>
           </div>
         </section>
@@ -52,7 +67,7 @@
           <div class="bar-row"><span>Light</span><div class="bar"><div id="bar-light"></div></div><em id="val-light">0%</em></div>
           <div class="bar-row"><span>Heavy</span><div class="bar"><div id="bar-heavy"></div></div><em id="val-heavy">0%</em></div>
           <div class="bar-row"><span>Dodge</span><div class="bar"><div id="bar-dodge"></div></div><em id="val-dodge">0%</em></div>
-          <div class="bar-row"><span>Block</span><div class="bar"><div id="bar-block"></div></div><em id="val-block">0%</em></div>
+          <div class="bar-row"><span>Parry</span><div class="bar"><div id="bar-parry"></div></div><em id="val-parry">0%</em></div>
         </section>
         <section class="side">
           <div class="label">Position bias</div>
@@ -77,6 +92,7 @@
           <div class="metric-hint">macro-avg over 4 classes · baseline ≈ 25%</div>
         </section>
         <section class="stats">
+          <div>mode: <span id="stat-mode">—</span></div>
           <div>α: <span id="stat-alpha">0.15</span></div>
           <div>obs: <span id="stat-obs">0</span></div>
           <div>deaths: <span id="stat-deaths">0</span></div>

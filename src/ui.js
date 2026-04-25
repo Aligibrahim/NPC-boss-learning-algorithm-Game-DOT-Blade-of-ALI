@@ -1,8 +1,8 @@
 // UI: visibility panel, overlay, telegraph label.
 
-const LABELS = { light: 'LIGHT', heavy: 'HEAVY', dodge: 'DODGE', block: 'BLOCK' };
+const LABELS = { light: 'LIGHT', heavy: 'HEAVY', dodge: 'DODGE', parry: 'PARRY' };
 const BOSS_LABELS = { slash: 'SLASH', slam: 'SLAM', charge: 'CHARGE', aoe: 'AOE' };
-const SHORT = { light: 'L', heavy: 'H', dodge: 'D', block: 'B' };
+const SHORT = { light: 'L', heavy: 'H', dodge: 'D', parry: 'P' };
 
 export function createUI(dom, logger = null) {
   let history = [];
@@ -10,7 +10,7 @@ export function createUI(dom, logger = null) {
 
   function refreshBars(brain) {
     const dist = brain.currentDist();
-    const keys = ['light', 'heavy', 'dodge', 'block'];
+    const keys = ['light', 'heavy', 'dodge', 'parry'];
     keys.forEach(k => {
       const pct = Math.round(dist[k] * 100);
       dom['bar-' + k].style.width = pct + '%';
@@ -102,6 +102,9 @@ export function createUI(dom, logger = null) {
 
   function onGameOver(won, state, brain) {
     dom.statDeaths.textContent = state.deaths;
+    dom.modePicker?.classList.add('hidden');
+    dom.modeCopy?.classList.add('hidden');
+    dom.overlayBtn?.classList.remove('hidden');
     dom.overlayTitle.textContent = won ? 'VICTORY' : 'Try again you MIGHT win LOOOLLL. LOSER';
     dom.overlayTitle.className = won ? 'win' : 'loss';
     dom.overlaySub.textContent = won

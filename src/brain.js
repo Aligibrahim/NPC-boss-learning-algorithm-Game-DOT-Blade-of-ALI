@@ -3,7 +3,7 @@
 // Updates via EMA with learning rate alpha. Picks a counter action the player
 // is statistically weak to, softened by exploration and a confidence cap.
 
-export const ACTIONS = ['light', 'heavy', 'dodge', 'block'];
+export const ACTIONS = ['light', 'heavy', 'dodge', 'parry'];
 export const BOSS_ACTIONS = ['slash', 'slam', 'charge', 'aoe'];
 
 // If the player is likely to do X, boss plays Y.
@@ -11,10 +11,10 @@ export const COUNTERS = {
   light: 'slash',
   heavy: 'charge',
   dodge: 'aoe',
-  block: 'slam',
+  parry: 'slam',
 };
 
-const UNIFORM = () => ({ light: 0.25, heavy: 0.25, dodge: 0.25, block: 0.25 });
+const UNIFORM = () => ({ light: 0.25, heavy: 0.25, dodge: 0.25, parry: 0.25 });
 
 export function createBrain(opts = {}) {
   const alpha = opts.alpha ?? 0.15;
@@ -29,7 +29,7 @@ export function createBrain(opts = {}) {
   // Confusion matrix: confusion[predicted][actual] = count.
   // Built live as the game is played so we can report accuracy / precision / recall / F1.
   const confusion = {};
-  for (const p of ACTIONS) confusion[p] = { light: 0, heavy: 0, dodge: 0, block: 0 };
+  for (const p of ACTIONS) confusion[p] = { light: 0, heavy: 0, dodge: 0, parry: 0 };
 
   // Spatial learning — EMA of "player is on the left half of the arena" probability.
   // 0.5 = no bias. Updated on every observation using the normalized playerX
@@ -126,7 +126,7 @@ export function createBrain(opts = {}) {
     table.clear();
     history = [];
     observations = 0;
-    for (const p of ACTIONS) confusion[p] = { light: 0, heavy: 0, dodge: 0, block: 0 };
+    for (const p of ACTIONS) confusion[p] = { light: 0, heavy: 0, dodge: 0, parry: 0 };
     leftBias = 0.5;
     sideSamples = 0;
   }

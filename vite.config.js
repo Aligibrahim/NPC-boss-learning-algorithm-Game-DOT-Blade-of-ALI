@@ -45,4 +45,6 @@ function sessionLogPlugin() {
 
 export default defineConfig({
   plugins: [sessionLogPlugin()],
+  build: { target: 'esnext' },
+  esbuild: { target: 'esnext' },
 });
